@@ -52,7 +52,7 @@ def init_logging(level, log_to_file):
 
 
 class _ShowdownConfig:
-    battle_bot_module: str
+    puzzle: str
     websocket_uri: str
     username: str
     password: str
@@ -69,7 +69,7 @@ class _ShowdownConfig:
     log_handler: Union[CustomRotatingFileHandler, logging.StreamHandler]
 
     def configure(self):
-        self.battle_bot_module = env("BATTLE_BOT")
+        self.puzzle = env("PUZZLE")
         self.websocket_uri = env("WEBSOCKET_URI")
         self.username = env("PS_USERNAME")
         self.password = env("PS_PASSWORD")
@@ -77,7 +77,6 @@ class _ShowdownConfig:
         self.pokemon_mode = env("POKEMON_MODE")
 
         self.run_count = env.int("RUN_COUNT", 1)
-        self.team = env("TEAM_NAME", None)
         self.user_to_challenge = env("USER_TO_CHALLENGE", None)
 
         self.save_replay = env.bool("SAVE_REPLAY", False)

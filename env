@@ -1,11 +1,10 @@
-BATTLE_BOT=safest
+PUZZLE=test
 WEBSOCKET_URI=sim.smogon.com:8000
 PS_USERNAME=MyUsername
 PS_PASSWORD=MyPassword
 BOT_MODE=ACCEPT_CHALLENGE
-POKEMON_MODE=gen7randombattle
+POKEMON_MODE=gen9nationaldexubers
 RUN_COUNT=1
 
 USER_TO_CHALLENGE=SomeOtherPerson
-TEAM_NAME=gen8/ou/clef_sand
 SAVE_REPLAY=False

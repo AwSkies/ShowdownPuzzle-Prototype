@@ -8,7 +8,7 @@ from copy import deepcopy
 import constants
 from config import ShowdownConfig, init_logging
 
-from teams import load_team
+from puzzles import load_team
 from showdown.run_battle import pokemon_battle
 from showdown.websocket_client import PSWebsocketClient
 
@@ -66,7 +66,7 @@ async def showdown():
     while True:
         if ShowdownConfig.log_to_file:
             ShowdownConfig.log_handler.do_rollover(datetime.now().strftime("%Y-%m-%dT%H:%M:%S.log"))
-        team = load_team(ShowdownConfig.team)
+        team = load_team(ShowdownConfig.puzzle)
         if ShowdownConfig.bot_mode == constants.CHALLENGE_USER:
             await ps_websocket_client.challenge_user(
                 ShowdownConfig.user_to_challenge,

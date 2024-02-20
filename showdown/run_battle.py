@@ -74,7 +74,7 @@ async def get_battle_tag_and_opponent(ps_websocket_client: PSWebsocketClient):
 
 
 async def initialize_battle_with_tag(ps_websocket_client: PSWebsocketClient, set_request_json=True):
-    battle_module = importlib.import_module('showdown.battle_bots.{}.main'.format(ShowdownConfig.battle_bot_module))
+    battle_module = importlib.import_module('showdown.puzzle_runner.puzzle_runner.main')
 
     battle_tag, opponent_name = await get_battle_tag_and_opponent(ps_websocket_client)
     while True:
@@ -84,7 +84,7 @@ async def initialize_battle_with_tag(ps_websocket_client: PSWebsocketClient, set
             user_json = json.loads(split_msg[2].strip('\''))
             user_id = user_json[constants.SIDE][constants.ID]
             opponent_id = constants.ID_LOOKUP[user_id]
-            battle = battle_module.BattleBot(battle_tag)
+            battle = battle_module.BattleBot(ShowdownConfig.puzzle, battle_tag)
             battle.opponent.name = opponent_id
             battle.opponent.account_name = opponent_name
 
@@ -179,8 +179,10 @@ async def start_battle(ps_websocket_client, pokemon_battle_type):
 
 async def pokemon_battle(ps_websocket_client, pokemon_battle_type):
     battle = await start_battle(ps_websocket_client, pokemon_battle_type)
+    # TODO: Load hints
     while True:
         msg = await ps_websocket_client.receive_message()
+        # TODO: Look for hint commands and give hints
         if battle_is_finished(battle.battle_tag, msg):
             if constants.WIN_STRING in msg:
                 winner = msg.split(constants.WIN_STRING)[-1].split('\n')[0].strip()
