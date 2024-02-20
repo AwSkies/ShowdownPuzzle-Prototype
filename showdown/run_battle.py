@@ -74,6 +74,7 @@ async def get_battle_tag_and_opponent(ps_websocket_client: PSWebsocketClient):
 
 
 async def initialize_battle_with_tag(ps_websocket_client: PSWebsocketClient, set_request_json=True):
+    # TODO: Change path once path structure is changed
     battle_module = importlib.import_module('showdown.battle_bots.{}.main'.format(ShowdownConfig.battle_bot_module))
 
     battle_tag, opponent_name = await get_battle_tag_and_opponent(ps_websocket_client)
