@@ -2,7 +2,6 @@ import random
 import os
 from .team_converter import export_to_packed
 
-# TODO: Change path name once path structure is changed
 TEAM_JSON_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "teams")
 
 
