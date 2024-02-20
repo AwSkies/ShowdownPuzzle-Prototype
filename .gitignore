@@ -1,6 +1,7 @@
 logs/
 venv/
 .idea/
+.vscode/
 **/actual_states/*
 **/__pycache__/*
 creds
