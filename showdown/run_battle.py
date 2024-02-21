@@ -13,6 +13,7 @@ from showdown.engine.evaluate import Scoring
 from showdown.battle import Pokemon
 from showdown.battle import LastUsedMove
 from showdown.battle_modifier import async_update_battle
+from showdown.puzzle_runner.PuzzleRunner import PuzzleRunner
 
 from showdown.websocket_client import PSWebsocketClient
 
@@ -73,9 +74,7 @@ async def get_battle_tag_and_opponent(ps_websocket_client: PSWebsocketClient):
             return battle_tag, opponent_name
 
 
-async def initialize_battle_with_tag(ps_websocket_client: PSWebsocketClient, set_request_json=True):
-    battle_module = importlib.import_module('showdown.puzzle_runner.puzzle_runner.main')
-
+async def initialize_battle_with_tag(ps_websocket_client: PSWebsocketClient, puzzle_commands, set_request_json=True):
     battle_tag, opponent_name = await get_battle_tag_and_opponent(ps_websocket_client)
     while True:
         msg = await ps_websocket_client.receive_message()
@@ -84,7 +83,7 @@ async def initialize_battle_with_tag(ps_websocket_client: PSWebsocketClient, set
             user_json = json.loads(split_msg[2].strip('\''))
             user_id = user_json[constants.SIDE][constants.ID]
             opponent_id = constants.ID_LOOKUP[user_id]
-            battle = battle_module.BattleBot(ShowdownConfig.puzzle, battle_tag)
+            battle = PuzzleRunner(puzzle_commands, battle_tag)
             battle.opponent.name = opponent_id
             battle.opponent.account_name = opponent_name
 
@@ -125,8 +124,8 @@ async def start_random_battle(ps_websocket_client: PSWebsocketClient, pokemon_ba
     return battle
 
 
-async def start_standard_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_type):
-    battle, opponent_id, user_json = await initialize_battle_with_tag(ps_websocket_client, set_request_json=False)
+async def start_standard_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_type, puzzle_commands):
+    battle, opponent_id, user_json = await initialize_battle_with_tag(ps_websocket_client, puzzle_commands, set_request_json=False)
     battle.battle_type = constants.STANDARD_BATTLE
     battle.generation = pokemon_battle_type[:4]
 
@@ -164,25 +163,23 @@ async def start_standard_battle(ps_websocket_client: PSWebsocketClient, pokemon_
     return battle
 
 
-async def start_battle(ps_websocket_client, pokemon_battle_type):
+async def start_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_type, puzzle_commands):
     if "random" in pokemon_battle_type:
         Scoring.POKEMON_ALIVE_STATIC = 30  # random battle benefits from a lower static score for an alive pkmn
         battle = await start_random_battle(ps_websocket_client, pokemon_battle_type)
     else:
-        battle = await start_standard_battle(ps_websocket_client, pokemon_battle_type)
+        battle = await start_standard_battle(ps_websocket_client, pokemon_battle_type, puzzle_commands)
 
-    await ps_websocket_client.send_message(battle.battle_tag, ["hf"])
-    await ps_websocket_client.send_message(battle.battle_tag, ['/timer on'])
+    await ps_websocket_client.send_message(battle.battle_tag, ["Welcome to this Showdown Puzzle! Have fun!"])
 
     return battle
 
 
-async def pokemon_battle(ps_websocket_client, pokemon_battle_type):
-    battle = await start_battle(ps_websocket_client, pokemon_battle_type)
-    # TODO: Load hints
+async def pokemon_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_type, puzzle_commands, hints):
+    battle = await start_battle(ps_websocket_client, pokemon_battle_type, puzzle_commands)
+    n_hints = 0
     while True:
         msg = await ps_websocket_client.receive_message()
-        # TODO: Look for hint commands and give hints
         if battle_is_finished(battle.battle_tag, msg):
             if constants.WIN_STRING in msg:
                 winner = msg.split(constants.WIN_STRING)[-1].split('\n')[0].strip()
@@ -192,6 +189,10 @@ async def pokemon_battle(ps_websocket_client, pokemon_battle_type):
             await ps_websocket_client.send_message(battle.battle_tag, ["gg"])
             await ps_websocket_client.leave_battle(battle.battle_tag, save_replay=ShowdownConfig.save_replay)
             return winner
+        # TODO: Check the message properly
+        elif msg.startswith(constants.HINT_COMMAND) and n_hints < len(hints):
+            await ps_websocket_client.send_message(battle.battle_tag, [hints[n_hints]])
+            n_hints += 1
         else:
             action_required = await async_update_battle(battle, msg)
             if action_required and not battle.wait:

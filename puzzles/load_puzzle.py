@@ -1,5 +1,6 @@
 import random
 import os
+from .puzzle_parser import get_puzzle_commands
 from .team_converter import export_to_packed
 
 PUZZLE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "puzzles")
@@ -30,7 +31,7 @@ def load_team(name):
     return export_to_packed(load_file(name, "team"))
 
 def load_puzzle(name):
-    return load_file(name, "puzzle")
+    return get_puzzle_commands(load_file(name, "puzzle"))
 
-def load_hint(name):
-    return load_file(name, "hints")
+def load_hints(name):
+    return load_file(name, "hints").splitlines()

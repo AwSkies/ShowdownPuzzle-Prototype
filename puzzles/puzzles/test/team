@@ -1,17 +1,22 @@
-Alakazam @ Alakazite  
-Ability: Synchronize  
-Tera Type: Psychic  
-EVs: 252 SpA / 120 Spe  
-Serious Nature  
-IVs: 0 Atk / 0 Spe  
-- Psychic  
-- Psychic Terrain  
-- Taunt  
+The Fish (Dracovish) @ Choice Scarf  
+Ability: Water Absorb  
+Tera Type: Water  
+EVs: 252 Atk / 4 SpD / 252 Spe  
+Adamant Nature  
+- Fishious Rend  
 
-Victini @ Choice Scarf  
-Ability: Victory Star  
-Tera Type: Psychic  
-EVs: 252 HP / 4 Atk / 252 Spe  
-Naive Nature  
-IVs: 0 Atk  
-- Final Gambit  
+Kingambit  
+Ability: Defiant  
+Tera Type: Dark  
+EVs: 244 HP / 252 Atk / 12 SpD  
+Brave Nature  
+- Kowtow Cleave  
+
+Deoxys-Attack @ Lagging Tail  
+Ability: Pressure  
+Tera Type: Normal  
+EVs: 107 Atk / 1 Def / 252 SpD / 148 Spe  
+Adamant Nature  
+- Stealth Rock  
+- Extreme Speed  
+- Protect  

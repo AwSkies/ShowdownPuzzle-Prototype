@@ -11,7 +11,7 @@ from showdown.engine.select_best_move import get_payoff_matrix
 logger = logging.getLogger(__name__)
 
 
-def format_decision(battle, decision):
+def format_decision(battle, decision, **kwargs):
     # Formats a decision for communication with Pokemon-Showdown
     # If the pokemon can mega-evolve, it will
     # If the move can be used as a Z-Move, it will be
@@ -26,21 +26,21 @@ def format_decision(battle, decision):
             raise ValueError("Tried to switch to: {}".format(switch_pokemon))
     else:
         message = "/choose move {}".format(decision)
-        if battle.user.active.can_mega_evo:
-            message = "{} {}".format(message, constants.MEGA)
-        elif battle.user.active.can_ultra_burst:
-            message = "{} {}".format(message, constants.ULTRA_BURST)
+        for flag in kwargs:
+            if flag == 'mega' and kwargs['mega'] and battle.user.active.can_mega_evo:
+                message = "{} {}".format(message, constants.MEGA)
+            
+            elif flag == 'ultra_burst' and kwargs['ultra_burst'] and battle.user.active.can_ultra_burst:
+                message = "{} {}".format(message, constants.ULTRA_BURST)
 
-        # only dynamax on last pokemon
-        if battle.user.active.can_dynamax and all(p.hp == 0 for p in battle.user.reserve):
-            message = "{} {}".format(message, constants.DYNAMAX)
+            if flag == 'dynamax' and kwargs['dynamax'] and battle.user.active.can_dynamax:
+                message = "{} {}".format(message, constants.DYNAMAX)
 
-        # only terastallize on last pokemon. Come back to this later because this is bad.
-        elif battle.user.active.can_terastallize and all(p.hp == 0 for p in battle.user.reserve):
-            message = "{} {}".format(message, constants.TERASTALLIZE)
+            elif flag == 'tera' and kwargs['tera'] and battle.user.active.can_terastallize:
+                message = "{} {}".format(message, constants.TERASTALLIZE)
 
-        if battle.user.active.get_move(decision).can_z:
-            message = "{} {}".format(message, constants.ZMOVE)
+            if flag == 'z' and kwargs['z'] and battle.user.active.get_move(decision).can_z:
+                message = "{} {}".format(message, constants.ZMOVE)
 
     return [message, str(battle.rqid)]
 

@@ -8,7 +8,7 @@ from copy import deepcopy
 import constants
 from config import ShowdownConfig, init_logging
 
-from puzzles import load_team
+from puzzles import load_team, load_puzzle, load_hints
 from showdown.run_battle import pokemon_battle
 from showdown.websocket_client import PSWebsocketClient
 
@@ -66,7 +66,11 @@ async def showdown():
     while True:
         if ShowdownConfig.log_to_file:
             ShowdownConfig.log_handler.do_rollover(datetime.now().strftime("%Y-%m-%dT%H:%M:%S.log"))
+        
         team = load_team(ShowdownConfig.puzzle)
+        puzzle_commands = load_puzzle(ShowdownConfig.puzzle)
+        hints = load_hints(ShowdownConfig.puzzle)
+
         if ShowdownConfig.bot_mode == constants.CHALLENGE_USER:
             await ps_websocket_client.challenge_user(
                 ShowdownConfig.user_to_challenge,
@@ -84,7 +88,7 @@ async def showdown():
         else:
             raise ValueError("Invalid Bot Mode: {}".format(ShowdownConfig.bot_mode))
 
-        winner = await pokemon_battle(ps_websocket_client, ShowdownConfig.pokemon_mode)
+        winner = await pokemon_battle(ps_websocket_client, ShowdownConfig.pokemon_mode, puzzle_commands, hints)
         if winner == ShowdownConfig.username:
             wins += 1
         else:
