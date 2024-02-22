@@ -13,7 +13,7 @@ from showdown.engine.evaluate import Scoring
 from showdown.battle import Pokemon
 from showdown.battle import LastUsedMove
 from showdown.battle_modifier import async_update_battle
-from showdown.puzzle_runner.PuzzleRunner import PuzzleRunner
+from showdown.puzzle_runner.puzzle_runner import PuzzleRunner
 
 from showdown.websocket_client import PSWebsocketClient
 

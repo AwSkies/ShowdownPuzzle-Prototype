@@ -3,6 +3,7 @@ import logging
 import config
 import constants
 
+from showdown.battle import Battle
 from showdown.engine.objects import StateMutator
 from showdown.engine.select_best_move import pick_safest
 from showdown.engine.select_best_move import get_payoff_matrix
@@ -11,13 +12,11 @@ from showdown.engine.select_best_move import get_payoff_matrix
 logger = logging.getLogger(__name__)
 
 
-def format_decision(battle, decision, **kwargs):
-    # Formats a decision for communication with Pokemon-Showdown
-    # If the pokemon can mega-evolve, it will
-    # If the move can be used as a Z-Move, it will be
+def format_decision(battle: Battle, decision, switch = False, **kwargs):
+    '''Formats a decision for communication with Pokemon-Showdown'''
 
-    if decision.startswith(constants.SWITCH_STRING + " "):
-        switch_pokemon = decision.split("switch ")[-1]
+    if switch:
+        switch_pokemon = decision
         for pkmn in battle.user.reserve:
             if pkmn.name == switch_pokemon:
                 message = "/switch {}".format(pkmn.index)
@@ -41,6 +40,8 @@ def format_decision(battle, decision, **kwargs):
 
             if flag == 'z' and kwargs['z'] and battle.user.active.get_move(decision).can_z:
                 message = "{} {}".format(message, constants.ZMOVE)
+    
+    # TODO: Check that the option selected is valid (contained in the valid options)
 
     return [message, str(battle.rqid)]
 
