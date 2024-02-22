@@ -44,14 +44,14 @@ def parse_tokens(tokens: list[str], i = 0, repeat_until_faint = False):
                 # If the next token looks like a pokemon name and not another token
                 if next not in constants.MODIFIER_TOKENS:
                     move = next
-                    i += 1
+                    i += 2
                 else:
                     if next == constants.MEGA_TOKEN:
                         modifiers['mega'] = True
                     elif next == constants.TERA_TOKEN:
                         modifiers['tera'] = True
                     move = tokens[i + 2]
-                    i += 2 
+                    i += 3 
                 
                 if move in constants.TOKENS:
                     raise SyntaxError(f"Expected a move name, got '{move}' instead")
@@ -88,7 +88,7 @@ def parse_tokens(tokens: list[str], i = 0, repeat_until_faint = False):
                 if repeat_until_faint:
                     raise SyntaxError(f"'{token}' unexpected in repeat until faint loop")
                 else:
-                    result = parse_tokens(tokens, i = i + 1)
+                    result = parse_tokens(tokens, i = i + 1, repeat_until_faint = True)
                     commands.append({
                         'action': constants.REPEAT_UNTIL_FAINT,
                         'commands': result[0]
