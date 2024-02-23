@@ -1,5 +1,7 @@
 import constants
 
+from data import all_move_json, pokedex
+
 def parse_puzzle_text(puzzle_text: str):
     tokens = ['']
     i = 0
@@ -26,6 +28,11 @@ def parse_tokens(tokens: list[str], i = 0, repeat_until_faint = False):
         tokens.pop(index)
         if tokens[index] not in constants.TOKENS:
             tokens.pop(index)
+
+    # Remove spaces
+    for j in range(len(tokens)):
+        tokens[j] = tokens[j].replace(' ', '')
+        tokens[j] = tokens[j].replace('-', '')
     
     commands = []
     try:
@@ -106,10 +113,16 @@ def parse_tokens(tokens: list[str], i = 0, repeat_until_faint = False):
     
     return commands
 
-def validate_commands(commands: list[dict]):
-    if commands[0]['action'] != constants.SET_SWITCH:
+def validate_commands(commands: list[dict], repeating = False):
+    if commands[0]['action'] != constants.SET_SWITCH and not repeating:
         raise ValueError("First command of each puzzle must be declaring a lead pokemon")
-    # TODO: Use data to check that names are valid?
+    for command in commands:
+        if command['action'] == constants.SWITCH or command['action'] == constants.SET_SWITCH and command['pokemon'] not in pokedex:
+            raise ValueError(f"'{command['pokemon']}' is not a valid Pokemon")
+        elif command['action'] == constants.MOVE and command['move'] not in all_move_json:
+            raise ValueError(f"'{command['move']}' is not a valid move")
+        elif command['action'] == constants.REPEAT_UNTIL_FAINT:
+            validate_commands(command['commands'], repeating=True)
 
 def get_puzzle_commands(puzzle_text: str):
     commands = parse_tokens(parse_puzzle_text(puzzle_text))
