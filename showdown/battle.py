@@ -121,81 +121,6 @@ class Battle(ABC):
                 'nationaldex' in ShowdownConfig.pokemon_mode
         )
 
-    def prepare_battles(self, guess_mega_evo_opponent=True, join_moves_together=False):
-        """Returns a list of battles based on this one
-        The battles have the opponent's reserve pokemon's unknowns filled in
-        The opponent's active pokemon in each of the battles has a different set"""
-        battle_copy = deepcopy(self)
-        battle_copy.opponent.lock_moves()
-        battle_copy.user.lock_active_pkmn_first_turn_moves()
-
-        if battle_copy.user.active.can_mega_evo:
-            # mega-evolving here gives the pkmn the random-battle spread (Serious + 85s)
-            # unfortunately the correct spread is not stored anywhere as of this being written
-            # this only happens on the turn the pkmn mega-evolves - the next turn will be fine
-            battle_copy.user.active.forme_change(get_mega_pkmn_name(battle_copy.user.active.name))
-
-        if guess_mega_evo_opponent and not battle_copy.opponent.mega_revealed() and self.mega_evolve_possible():
-            check_in_sets = battle_copy.battle_type == constants.STANDARD_BATTLE
-            battle_copy.opponent.active.try_convert_to_mega(check_in_sets=check_in_sets)
-
-        # for reserve pokemon only guess their most likely item/ability/spread and guess all moves
-        for pkmn in filter(lambda x: x.is_alive(), battle_copy.opponent.reserve):
-            pkmn.guess_most_likely_attributes()
-
-        try:
-            pokemon_sets = get_pokemon_sets(battle_copy.opponent.active.name)
-        except KeyError:
-            logger.warning("No sets for {}, trying to find most likely attributes".format(battle_copy.opponent.active.name))
-            battle_copy.opponent.active.guess_most_likely_attributes()
-            return [battle_copy]
-
-        possible_spreads = sorted(pokemon_sets[SPREADS_STRING], key=lambda x: x[2], reverse=True)
-        possible_abilities = sorted(pokemon_sets[ABILITY_STRING], key=lambda x: x[1], reverse=True)
-        possible_items = sorted(pokemon_sets[ITEM_STRING], key=lambda x: x[1], reverse=True)
-        possible_moves = sorted(pokemon_sets[MOVES_STRING], key=lambda x: x[1], reverse=True)
-
-        spreads = battle_copy.opponent.active.get_possible_spreads(possible_spreads)
-        items = battle_copy.opponent.active.get_possible_items(possible_items)
-        abilities = battle_copy.opponent.active.get_possible_abilities(possible_abilities)
-        expected_moves, chance_moves = battle_copy.opponent.active.get_possible_moves(possible_moves, battle_copy.battle_type)
-
-        if join_moves_together:
-            chance_move_combinations = [chance_moves]
-        else:
-            number_of_unknown_moves = max(4 - len(battle_copy.opponent.active.moves) - len(expected_moves), 0)
-            chance_move_combinations = list(itertools.combinations(chance_moves, number_of_unknown_moves))
-
-        combinations = list(itertools.product(spreads, items, abilities, chance_move_combinations))
-
-        # create battle clones for each of the combinations
-        battles = list()
-        for c in combinations:
-            new_battle = deepcopy(battle_copy)
-
-            all_moves = [m.name for m in new_battle.opponent.active.moves]
-            all_moves += expected_moves
-            all_moves += c[3]
-            all_moves = [Move(m) for m in all_moves]
-
-            if join_moves_together or set_makes_sense(c[0][0], c[0][1], c[1], c[2], all_moves):
-                new_battle.opponent.active.set_spread(c[0][0], c[0][1])
-                if new_battle.opponent.active.name == 'ditto':
-                    new_battle.opponent.active.stats = battle_copy.opponent.active.stats
-                new_battle.opponent.active.item = c[1]
-                new_battle.opponent.active.ability = c[2]
-                for m in expected_moves:
-                    new_battle.opponent.active.add_move(m)
-                for m in c[3]:
-                    new_battle.opponent.active.add_move(m)
-
-                logger.debug("Possible set for opponent's {}:\t{} {} {} {} {}".format(battle_copy.opponent.active.name, c[0][0], c[0][1], c[1], c[2], all_moves))
-                battles.append(new_battle)
-
-            new_battle.opponent.lock_moves()
-
-        return battles if battles else [battle_copy]
-
     def create_state(self):
         user_active = TransposePokemon.from_state_pokemon_dict(self.user.active.to_dict())
         user_reserve = dict()
@@ -329,13 +254,16 @@ class Battler:
         if first_turn:
             existing_conditions = (None, None, None)
         else:
-            existing_conditions = (
-                self.active.name,
-                self.active.boosts,
-                self.active.volatile_statuses,
-                self.active.terastallized,
-                self.active.types
-            )
+            try:
+                existing_conditions = (
+                    self.active.name,
+                    self.active.boosts,
+                    self.active.volatile_statuses,
+                    self.active.terastallized,
+                    self.active.types
+                )
+            except AttributeError as e:
+                existing_conditions = (None, None, None)
 
         try:
             trapped = user_json[constants.ACTIVE][0].get(constants.TRAPPED, False)
@@ -488,6 +416,7 @@ class Pokemon:
         self.can_ultra_burst = False
         self.can_dynamax = False
         self.is_mega = False
+        self.can_terastallize = False
         self.can_have_assaultvest = True
         self.can_have_choice_item = True
         self.can_not_have_band = False

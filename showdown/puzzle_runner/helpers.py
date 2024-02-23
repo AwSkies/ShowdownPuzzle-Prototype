@@ -1,6 +1,5 @@
 import logging
 
-import config
 import constants
 
 from showdown.battle import Battle

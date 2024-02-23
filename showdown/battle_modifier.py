@@ -104,6 +104,7 @@ def request(battle, split_msg):
     if len(split_msg) >= 2:
         battle_json = json.loads(split_msg[2].strip('\''))
         logger.debug("Received battle JSON from server: {}".format(battle_json))
+        battle.user.from_json(battle_json)
         battle.rqid = battle_json[constants.RQID]
 
         if battle_json.get(constants.FORCE_SWITCH):
@@ -146,41 +147,6 @@ def switch_or_drag(battle, split_msg):
         side = battle.user
         side.side_conditions[constants.TOXIC_COUNT] = 0
 
-    if side.active is not None:
-        # set the pkmn's types back to their original value if the types were changed
-        # if the pkmn is terastallized, this does not happen
-        if constants.TYPECHANGE in side.active.volatile_statuses and not side.active.terastallized:
-            original_types = pokedex[side.active.name][constants.TYPES]
-            logger.debug("{} had it's type changed - changing its types back to {}".format(side.active.name, original_types))
-            side.active.types = original_types
-
-        # if the target was transformed, reset its transformed attributes
-        if constants.TRANSFORM in side.active.volatile_statuses:
-            logger.debug("{} was transformed. Resetting its transformed attributes".format(side.active.name))
-            side.active.stats = calculate_stats(side.active.base_stats, side.active.level)
-            side.active.ability = None
-            side.active.moves = []
-            side.active.types = pokedex[side.active.name][constants.TYPES]
-
-        # reset the boost of the pokemon being replaced
-        side.active.boosts.clear()
-
-        # reset the volatile statuses of the pokemon being replaced
-        side.active.volatile_statuses.clear()
-
-        # reset toxic count for this side
-        side.side_conditions[constants.TOXIC_COUNT] = 0
-
-        # if the side is alive and has regenerator, give it back 1/3 of it's maxhp
-        if side.active.hp > 0 and not side.active.fainted and side.active.ability == "regenerator":
-            health_healed = int(side.active.max_hp / 3)
-            side.active.hp = min(side.active.hp + health_healed, side.active.max_hp)
-            logger.debug(
-                "{} switched out with regenerator. Healing it to {}/{}".format(
-                    side.active.name, side.active.hp, side.active.max_hp
-                )
-            )
-
     # check if the pokemon exists in the reserves
     # if it does not, then the newly-created pokemon is used (for formats without team preview)
     nickname = split_msg[2]
@@ -188,7 +154,7 @@ def switch_or_drag(battle, split_msg):
     pkmn = find_pokemon_in_reserves(temp_pkmn.name, side.reserve)
 
     if pkmn is None:
-        pkmn = Pokemon.from_switch_string(split_msg[3], nickname=nickname)
+        pkmn = battle.user.active
     else:
         pkmn.nickname = temp_pkmn.nickname
         side.reserve.remove(pkmn)
@@ -204,8 +170,6 @@ def switch_or_drag(battle, split_msg):
         side.reserve.append(side.active)
 
     side.active = pkmn
-    if side.active.name in constants.UNKOWN_POKEMON_FORMES:
-        side.active = Pokemon.from_switch_string(split_msg[3], nickname=nickname)
 
 
 def heal_or_damage(battle, split_msg):
@@ -305,35 +269,6 @@ def move(battle, split_msg):
         move_object.current_pp -= 1
         logger.debug("{} already has the move {}. Decrementing the PP by 1".format(pkmn.name, move_name))
 
-    # if this pokemon used two different moves without switching,
-    # set a flag to signify that it cannot have a choice item
-    if (
-            is_opponent(battle, split_msg) and
-            side.last_used_move.pokemon_name == side.active.name and
-            side.last_used_move.move != move_name
-    ):
-        logger.debug("{} used two different moves - it cannot have a choice item".format(pkmn.name))
-        pkmn.can_have_choice_item = False
-        if pkmn.item in constants.CHOICE_ITEMS:
-            logger.warning("{} has a choice item, but used two different moves - setting it's item to UNKNOWN".format(pkmn.name))
-            pkmn.item = constants.UNKNOWN_ITEM
-
-    # if the opponent uses a boosting status move, they cannot have a choice item
-    # this COULD be set for any status move, but some pkmn uncommonly run things like specs + wisp
-    try:
-        if constants.BOOSTS in all_move_json[move_name] and all_move_json[move_name][constants.CATEGORY] == constants.STATUS:
-            logger.debug("{} used a boosting status-move. Setting can_have_choice_item to False".format(pkmn.name))
-            pkmn.can_have_choice_item = False
-    except KeyError:
-        pass
-
-    try:
-        if all_move_json[move_name][constants.CATEGORY] == constants.STATUS:
-            logger.debug("{} used a status-move. Setting can_have_assultvest to False".format(pkmn.name))
-            pkmn.can_have_assaultvest = False
-    except KeyError:
-        pass
-
     try:
         category = all_move_json[move_name][constants.CATEGORY]
         logger.debug("Setting {}'s last used move: {}".format(pkmn.name, move_name))
@@ -349,12 +284,6 @@ def move(battle, split_msg):
             move=constants.DO_NOTHING_MOVE,
             turn=battle.turn
         )
-
-    # if this pokemon used a damaging move, eliminate the possibility of it having a lifeorb
-    # the lifeorb will reveal itself if it has it
-    if category in constants.DAMAGING_CATEGORIES and not any([normalize_name(a) in ['sheerforce', 'magicguard'] for a in pokedex[pkmn.name][constants.ABILITIES].values()]):
-        logger.debug("{} used a damaging move - not guessing lifeorb anymore".format(pkmn.name))
-        pkmn.can_have_life_orb = False
 
     # there is nothing special in the protocol for "wish" - it must be extracted here
     if move_name == constants.WISH and 'still' not in split_msg[4]:
@@ -808,375 +737,10 @@ def noinit(battle, split_msg):
         logger.debug("Renamed battle to {}".format(battle.battle_tag))
 
 
-def check_speed_ranges(battle, msg_lines):
-    """
-    Intention:
-        This function is intended to set the min or max possible speed that the opponent's
-        active Pokemon could possibly have given a turn that just happened.
-
-        For example: if both the bot and the opponent use an equal priority move but the
-        opponent moves first, then the opponent's min_speed attribute will be set to the
-        bots actual speed. This is because the opponent must have at least that much speed
-        for it to have gone first.
-
-        These min/max speeds are set without knowledge of items. If the opponent goes first
-        when having a choice scarf then min speed will still be set to the bots speed. When
-        it comes time to guess a Pokemon's possible set(s), the item must be taken into account
-        as well when determining the final speed of a Pokemon. Abilities are NOT taken into
-        consideration because their speed modifications are subject to certain conditions
-        being present, whereas a choice scarf ALWAYS boosts speed.
-
-        If there is a situation where an ability could have modified the turn order (either by
-        changing a move's priority or giving a Pokemon more speed) then this check should be
-        skipped. Examples are:
-            - either side switched
-            - the opponent COULD have a speed-boosting weather ability AND that weather is up
-            - the opponent COULD have prankster and it used a status move
-            - Grassy Glide is used when Grassy Terrain is up
-    """
-    # If either side switched this turn - don't do this check
-    if any(ln.startswith("|switch|") for ln in msg_lines):
-        return
-
-    moves = [get_move_information(m) for m in msg_lines if m.startswith('|move|')]
-    if len(moves) != 2 or moves[0][1][constants.PRIORITY] != moves[1][1][constants.PRIORITY]:
-        return
-
-    bot_went_first = moves[0][0].startswith(battle.user.name)
-
-    if (
-        battle.opponent.active is None or
-        battle.opponent.active.item == "choicescarf" or
-        can_have_speed_modified(battle, battle.opponent.active) or
-        (not bot_went_first and can_have_priority_modified(battle, battle.opponent.active, moves[0][1][constants.ID])) or
-        (bot_went_first and can_have_priority_modified(battle, battle.user.active, moves[0][1][constants.ID]))
-    ):
-        return
-
-    battle_copy = deepcopy(battle)
-    battle_copy.user.from_json(battle_copy.request_json)
-
-    speed_threshold = int(
-        boost_multiplier_lookup[battle_copy.user.active.boosts[constants.SPEED]] *
-        battle_copy.user.active.stats[constants.SPEED] /
-        boost_multiplier_lookup[battle_copy.opponent.active.boosts[constants.SPEED]]
-    )
-
-    if battle.opponent.side_conditions[constants.TAILWIND]:
-        speed_threshold = int(speed_threshold / 2)
-
-    if battle.user.side_conditions[constants.TAILWIND]:
-        speed_threshold = int(speed_threshold * 2)
-
-    if battle.opponent.active.status == constants.PARALYZED:
-        speed_threshold = int(speed_threshold * 2)
-
-    if battle.user.active.status == constants.PARALYZED:
-        speed_threshold = int(speed_threshold / 2)
-
-    if battle.user.active.item == "choicescarf":
-        speed_threshold = int(speed_threshold * 1.5)
-
-    # we want to swap which attribute gets updated in trickroom because the slower pokemon goes first
-    if battle.trick_room:
-        bot_went_first = not bot_went_first
-
-    if bot_went_first:
-        opponent_max_speed = min(battle.opponent.active.speed_range.max, speed_threshold)
-        battle.opponent.active.speed_range = StatRange(
-            min=battle.opponent.active.speed_range.min,
-            max=opponent_max_speed
-        )
-        logger.info("Updated {}'s max speed to {}".format(battle.opponent.active.name, battle.opponent.active.speed_range.max))
-
-    else:
-        opponent_min_speed = max(battle.opponent.active.speed_range.min, speed_threshold)
-        battle.opponent.active.speed_range = StatRange(
-            min=opponent_min_speed,
-            max=battle.opponent.active.speed_range.max
-        )
-        logger.info(
-            "Updated {}'s min speed to {}".format(battle.opponent.active.name, battle.opponent.active.speed_range.min))
-
-
-def check_choicescarf(battle, msg_lines):
-    # If either side switched this turn - don't do this check
-    if any(ln.startswith("|switch|") for ln in msg_lines):
-        return
-
-    moves = [get_move_information(m) for m in msg_lines if m.startswith('|move|')]
-    if len(moves) != 2 or moves[0][0].startswith(battle.user.name) or moves[0][1][constants.PRIORITY] != moves[1][1][constants.PRIORITY]:
-        return
-
-    if (
-        battle.opponent.active is None or
-        battle.opponent.active.item != constants.UNKNOWN_ITEM or
-        can_have_speed_modified(battle, battle.opponent.active) or
-        can_have_priority_modified(battle, battle.opponent.active, moves[0][1][constants.ID])
-    ):
-        return
-
-    battle_copy = deepcopy(battle)
-    battle_copy.user.from_json(battle_copy.request_json)
-    if battle.battle_type == constants.RANDOM_BATTLE:
-        battle_copy.opponent.active.set_spread('serious', '85,85,85,85,85,85')  # random battles have known spreads
-    else:
-        if battle.trick_room:
-            battle_copy.opponent.active.set_spread('quiet', '0,0,0,0,0,0')  # assume as slow as possible in trickroom
-        else:
-            battle_copy.opponent.active.set_spread('jolly', '0,0,0,0,0,252')  # assume as fast as possible
-    state = battle_copy.create_state()
-    opponent_effective_speed = get_effective_speed(state, state.opponent)
-    bot_effective_speed = get_effective_speed(state, state.user)
-
-    if battle.trick_room:
-        has_scarf = opponent_effective_speed > bot_effective_speed
-    else:
-        has_scarf = bot_effective_speed > opponent_effective_speed
-
-    if has_scarf:
-        logger.debug("Opponent {} could not have gone first - setting it's item to choicescarf".format(battle.opponent.active.name))
-        battle.opponent.active.item = 'choicescarf'
-
-
-def get_damage_dealt(battle, split_msg, next_messages):
-    move_name = normalize_name(split_msg[3])
-    critical_hit = False
-
-    if is_opponent(battle, split_msg):
-        attacking_side = battle.opponent
-        defending_side = battle.user
-    else:
-        attacking_side = battle.user
-        defending_side = battle.opponent
-
-    for line in next_messages:
-        next_line_split = line.split('|')
-        # if one of these strings appears in index 1 then
-        # exit out since we are done with this pokemon's move
-        if len(next_line_split) < 2 or next_line_split[1] in MOVE_END_STRINGS:
-            break
-
-        elif next_line_split[1] == '-crit':
-            critical_hit = True
-
-        # if '-damage' appears, we want to parse the percentage damage dealt
-        elif next_line_split[1] == '-damage' and defending_side.name in next_line_split[2]:
-            final_health, maxhp, _ = get_pokemon_info_from_condition(next_line_split[3])
-            # maxhp can be 0 if the targetted pokemon fainted
-            # the message would be: "0 fnt"
-            if maxhp == 0:
-                maxhp = defending_side.active.max_hp
-
-            damage_dealt = (defending_side.active.hp / defending_side.active.max_hp)*maxhp - final_health
-            damage_percentage = round(damage_dealt / maxhp, 4)
-
-            logger.debug("{} did {}% damage to {} with {}".format(attacking_side.active.name, damage_percentage * 100, defending_side.active.name, move_name))
-            return DamageDealt(attacker=attacking_side.active.name, defender=defending_side.active.name, move=move_name, percent_damage=damage_percentage, crit=critical_hit)
-
-
-def check_choice_band_or_specs(battle, damage_dealt):
-    if (
-        battle.opponent.active is None or
-        battle.opponent.active.item != constants.UNKNOWN_ITEM or
-        damage_dealt.crit or
-        damage_dealt.move in constants.WEIGHT_BASED_MOVES or
-        damage_dealt.move in constants.SPEED_BASED_MOVES or
-        not battle.opponent.active.can_have_choice_item
-    ):
-        return
-
-    try:
-        move_dict = all_move_json[damage_dealt.move]
-    except KeyError:
-        logger.debug("Could not find the move {}, skipping choice item check".format(move))
-        return
-
-    if move_dict[constants.CATEGORY] == constants.PHYSICAL:
-        choice_item = 'choiceband'
-        spread = 'adamant', '0,252,0,0,0,0'
-    elif move_dict[constants.CATEGORY] == constants.SPECIAL:
-        choice_item = 'choicespecs'
-        spread = 'modest', '0,0,0,252,0,0'
-    else:
-        # don't guess anything if the move was neither physical nor special
-        return
-
-    if battle.battle_type == constants.RANDOM_BATTLE:
-        spread = 'serious', '85,85,85,85,85,85'
-
-    min_damage_with_choice_item = float('inf')
-    max_damage_without_choice_item = float('-inf')
-    potential_battles = battle.prepare_battles(guess_mega_evo_opponent=False, join_moves_together=True)
-
-    battle_copy = deepcopy(battle)
-    battle_copy.user.from_json(battle.request_json)
-    for b in potential_battles:
-
-        # if the item is not the choice item - use it to find the max damage roll possible for all items
-        if b.opponent.active.item != choice_item:
-            b.opponent.active.set_spread(*spread)
-            b.user.active.stats = battle_copy.user.active.stats
-
-            state = b.create_state()
-
-            damage = calculate_damage(state, constants.OPPONENT, damage_dealt.move, battle.user.last_used_move.move, calc_type='max')[0]
-            max_damage_without_choice_item = max(max_damage_without_choice_item, damage)
-
-        # also find the min damage roll possible for the choice-item
-        b.opponent.active.item = choice_item
-        b.opponent.active.set_spread(*spread)
-        b.user.active.stats = battle_copy.user.active.stats
-
-        state = b.create_state()
-
-        damage = calculate_damage(state, constants.OPPONENT, damage_dealt.move, battle.user.last_used_move.move, calc_type='min')[0]
-        min_damage_with_choice_item = min(min_damage_with_choice_item, damage)
-
-    # dont infer if we did not find a damage amount
-    if max_damage_without_choice_item == float('-inf') or min_damage_with_choice_item == float('inf'):
-        return
-
-    actual_damage_dealt = damage_dealt.percent_damage * battle.user.active.max_hp
-
-    # if the damage dealt is more than 1.2x the max-roll WITHOUT a choice item then the pkmn DOES have a choice-item
-    if actual_damage_dealt > (max_damage_without_choice_item * 1.2):  # multiply to avoid rounding errors
-        logger.debug("{} has {}".format(battle.opponent.active.name, choice_item))
-        battle.opponent.active.item = choice_item
-
-    # if the damage dealt is less than 0.8x the min-roll given a choice-item then the pkmn DOES NOT have a choice-item
-    if (
-        actual_damage_dealt < (min_damage_with_choice_item * 0.8) and  # multiply to avoid rounding errors
-        (battle.user.active.hp - actual_damage_dealt) > 1  # this is checking if the move KO-ed
-                                                           # if it did, we do not want to set this flag
-                                                           # Check for greater than 1 to avoid rounding errors
-    ):
-        logger.debug("{} did not do enough damage to have {}".format(battle.opponent.active.name, choice_item))
-        if choice_item == "choiceband":
-            battle.opponent.active.can_not_have_band = True
-        elif choice_item == "choicespecs":
-            battle.opponent.active.can_not_have_specs = True
-        else:
-            raise ValueError("{} is neither 'choiceband' or 'choicespecs'")
-
-
-def check_heavydutyboots(battle, msg_lines):
-    side_to_check = battle.opponent
-
-    if (
-        side_to_check.active.item != constants.UNKNOWN_ITEM or
-        'magicguard' in [normalize_name(a) for a in pokedex[side_to_check.active.name][constants.ABILITIES].values()]
-    ):
-        return
-
-    if side_to_check.side_conditions[constants.STEALTH_ROCK] > 0:
-        pkmn_took_stealthrock_damage = False
-        for line in msg_lines:
-            split_line = line.split('|')
-
-            # |-damage|p2a: Weedle|88/100|[from] Stealth Rock
-            if (
-                len(split_line) > 4 and
-                split_line[1] == '-damage' and
-                split_line[2].startswith(side_to_check.name) and
-                split_line[4] == '[from] Stealth Rock'
-            ):
-                pkmn_took_stealthrock_damage = True
-
-        if not pkmn_took_stealthrock_damage:
-            logger.debug("{} has heavydutyboots".format(side_to_check.active.name))
-            side_to_check.active.item = 'heavydutyboots'
-        else:
-            logger.debug("{} was affected by stealthrock, it cannot have heavydutyboots".format(side_to_check.active.name))
-            side_to_check.active.can_have_heavydutyboots = False
-
-    elif (
-        side_to_check.side_conditions[constants.SPIKES] > 0 and
-        'flying' not in side_to_check.active.types and
-        side_to_check.active.ability != 'levitate'
-    ):
-        pkmn_took_spikes_damage = False
-        for line in msg_lines:
-            split_line = line.split('|')
-
-            # |-damage|p2a: Weedle|88/100|[from] Spikes
-            if (
-                    len(split_line) > 4 and
-                    split_line[1] == '-damage' and
-                    split_line[2].startswith(side_to_check.name) and
-                    split_line[4] == '[from] Spikes'
-            ):
-                pkmn_took_spikes_damage = True
-
-        if not pkmn_took_spikes_damage:
-            logger.debug("{} has heavydutyboots".format(side_to_check.active.name))
-            side_to_check.active.item = 'heavydutyboots'
-        else:
-            logger.debug("{} was affected by spikes, it cannot have heavydutyboots".format(side_to_check.active.name))
-            side_to_check.active.can_have_heavydutyboots = False
-    elif (
-        side_to_check.side_conditions[constants.TOXIC_SPIKES] > 0 and
-        'flying' not in side_to_check.active.types and
-        'poison' not in side_to_check.active.types and
-        'steel' not in side_to_check.active.types and
-        side_to_check.active.ability != 'levitate' and
-        side_to_check.active.ability not in constants.IMMUNE_TO_POISON_ABILITIES
-    ):
-        pkmn_took_toxicspikes_poison = False
-        for line in msg_lines:
-            split_line = line.split('|')
-
-            # a pokemon can be toxic-ed from sources other than toxicspikes
-            # stopping at one of these strings ensures those other sources aren't considered
-            if len(split_line) < 2 or split_line[1] in MOVE_END_STRINGS:
-                break
-
-            # |-status|p2a: Pikachu|psn
-            if (
-                    split_line[1] == '-status' and
-                    (split_line[3] == constants.POISON or split_line[3] == constants.TOXIC) and
-                    split_line[2].startswith(side_to_check.name)
-            ):
-                pkmn_took_toxicspikes_poison = True
-
-        if not pkmn_took_toxicspikes_poison:
-            logger.debug("{} has heavydutyboots".format(side_to_check.active.name))
-            side_to_check.active.item = 'heavydutyboots'
-        else:
-            logger.debug("{} was affected by toxicspikes, it cannot have heavydutyboots".format(side_to_check.active.name))
-            side_to_check.active.can_have_heavydutyboots = False
-
-    elif (
-            side_to_check.side_conditions[constants.STICKY_WEB] > 0 and
-            'flying' not in side_to_check.active.types and
-            side_to_check.active.ability != 'levitate'
-    ):
-        pkmn_was_affected_by_stickyweb = False
-        for line in msg_lines:
-            split_line = line.split('|')
-
-            # |-activate|p2a: Gengar|move: Sticky Web
-            if (
-                    len(split_line) == 4 and
-                    split_line[1] == '-activate' and
-                    split_line[2].startswith(side_to_check.name) and
-                    split_line[3] == 'move: Sticky Web'
-            ):
-                pkmn_was_affected_by_stickyweb = True
-
-        if not pkmn_was_affected_by_stickyweb:
-            logger.debug("{} has heavydutyboots".format(side_to_check.active.name))
-            side_to_check.active.item = 'heavydutyboots'
-        else:
-            logger.debug("{} was affected by sticky web, it cannot have heavydutyboots".format(side_to_check.active.name))
-            side_to_check.active.can_have_heavydutyboots = False
-
-
 def update_battle(battle, msg):
     msg_lines = msg.split('\n')
 
     action = None
-    check_speed_ranges(battle, msg_lines)
     for i, line in enumerate(msg_lines):
         split_msg = line.split('|')
         if len(split_msg) < 2:
@@ -1231,15 +795,6 @@ def update_battle(battle, msg):
         function_to_call = battle_modifiers_lookup.get(action)
         if function_to_call is not None:
             function_to_call(battle, split_msg)
-
-        if action == 'move' and is_opponent(battle, split_msg):
-            check_choicescarf(battle, msg_lines)
-            damage_dealt = get_damage_dealt(battle, split_msg, msg_lines[i + 1:])
-            if damage_dealt:
-                check_choice_band_or_specs(battle, damage_dealt)
-
-        elif action == 'switch' and is_opponent(battle, split_msg):
-            check_heavydutyboots(battle, msg_lines[i+1:])
 
         if action == 'turn':
             return True
