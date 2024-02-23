@@ -16,12 +16,14 @@ def format_decision(battle: Battle, decision, switch = False, **kwargs):
 
     if switch:
         switch_pokemon = decision
+        verify = f"switch {switch_pokemon.replace(' ', '')}"
         if switch_pokemon in [pkmn.name for pkmn in battle.user.reserve]:
             message = "/switch {}".format(switch_pokemon)
         else:
             raise ValueError("Tried to switch to: {}".format(switch_pokemon))
     else:
         message = "/choose move {}".format(decision)
+        verify = decision.replace(' ', '')
         for flag in kwargs:
             if flag == 'mega' and kwargs['mega'] and battle.user.active.can_mega_evo:
                 message = "{} {}".format(message, constants.MEGA)
@@ -38,7 +40,8 @@ def format_decision(battle: Battle, decision, switch = False, **kwargs):
             if flag == 'z' and kwargs['z'] and battle.user.active.get_move(decision).can_z:
                 message = "{} {}".format(message, constants.ZMOVE)
     
-    # TODO: Check that the option selected is valid (contained in the valid options)
+    if verify not in battle.get_all_options()[0]:
+        raise ValueError(f"{verify} is not a valid option at this time")
 
     return [message, str(battle.rqid)]
 
