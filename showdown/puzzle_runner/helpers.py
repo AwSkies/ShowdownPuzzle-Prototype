@@ -17,10 +17,8 @@ def format_decision(battle: Battle, decision, switch = False, **kwargs):
 
     if switch:
         switch_pokemon = decision
-        for pkmn in battle.user.reserve:
-            if pkmn.name == switch_pokemon:
-                message = "/switch {}".format(pkmn.index)
-                break
+        if switch_pokemon in [pkmn.name for pkmn in battle.user.reserve]:
+            message = "/switch {}".format(switch_pokemon)
         else:
             raise ValueError("Tried to switch to: {}".format(switch_pokemon))
     else:

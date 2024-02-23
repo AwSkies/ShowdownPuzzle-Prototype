@@ -17,7 +17,7 @@ def parse_puzzle_text(puzzle_text: str):
     while '' in tokens:
         tokens.remove('')
 
-    return tokens
+    return [t.lower() for t in tokens]
 
 def parse_tokens(tokens: list[str], i = 0, repeat_until_faint = False):
     # Remove comments
@@ -106,5 +106,12 @@ def parse_tokens(tokens: list[str], i = 0, repeat_until_faint = False):
     
     return commands
 
+def validate_commands(commands: list[dict]):
+    if commands[0]['action'] != constants.SET_SWITCH:
+        raise ValueError("First command of each puzzle must be declaring a lead pokemon")
+    # TODO: Use data to check that names are valid?
+
 def get_puzzle_commands(puzzle_text: str):
-    return parse_tokens(parse_puzzle_text(puzzle_text))
+    commands = parse_tokens(parse_puzzle_text(puzzle_text))
+    validate_commands(commands)
+    return commands

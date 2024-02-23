@@ -29,15 +29,7 @@ def battle_is_finished(battle_tag, msg):
 
 
 async def async_pick_move(battle):
-    battle_copy = deepcopy(battle)
-    if battle_copy.request_json:
-        battle_copy.user.from_json(battle_copy.request_json)
-
-    loop = asyncio.get_event_loop()
-    with concurrent.futures.ThreadPoolExecutor() as pool:
-        best_move = await loop.run_in_executor(
-            pool, battle_copy.find_best_move
-        )
+    best_move = battle.find_best_move()
     choice = best_move[0]
     if constants.SWITCH_STRING in choice:
         battle.user.last_used_move = LastUsedMove(battle.user.active.name, "switch {}".format(choice.split()[-1]), battle.turn)
@@ -52,12 +44,16 @@ async def handle_team_preview(battle, ps_websocket_client):
     battle_copy.opponent.active = Pokemon.get_dummy()
 
     best_move = await async_pick_move(battle_copy)
-    size_of_team = len(battle.user.reserve) + 1
-    team_list_indexes = list(range(1, size_of_team))
-    choice_digit = int(best_move[0].split()[-1])
+    size_of_team = len(battle.user.reserve)
+    team_list_indexes = list(range(1, size_of_team + 1))
+    switch_pokemon = best_move[0].split()[-1]
+    for pkmn in battle.user.reserve:
+        if pkmn.name == switch_pokemon:
+            team_list_indexes.remove(pkmn.index)
+            choice_digit = pkmn.index
+            break
 
-    team_list_indexes.remove(choice_digit)
-    message = ["/team {}{}|{}".format(choice_digit, "".join(str(x) for x in team_list_indexes), battle.rqid)]
+    message = [f"/team {choice_digit}{"".join(str(x) for x in team_list_indexes)}|{battle.rqid}"]
 
     await ps_websocket_client.send_message(battle.battle_tag, message)
 
@@ -190,6 +186,7 @@ async def pokemon_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_
             await ps_websocket_client.leave_battle(battle.battle_tag, save_replay=ShowdownConfig.save_replay)
             return winner
         # TODO: Check the message properly
+        # TODO: Implement crit detection
         elif msg.startswith(constants.HINT_COMMAND) and n_hints < len(hints):
             await ps_websocket_client.send_message(battle.battle_tag, [hints[n_hints]])
             n_hints += 1
