@@ -3,8 +3,7 @@ WEBSOCKET_URI=sim.smogon.com:8000
 PS_USERNAME=MyUsername
 PS_PASSWORD=MyPassword
 BOT_MODE=ACCEPT_CHALLENGE
-POKEMON_MODE=gen9nationaldexubers
-RUN_COUNT=1
+POKEMON_MODE=gen9nationaldexag
 
 USER_TO_CHALLENGE=SomeOtherPerson
 SAVE_REPLAY=False
