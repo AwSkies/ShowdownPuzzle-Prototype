@@ -1,25 +1,51 @@
-# Showdown  ![umbreon](https://play.pokemonshowdown.com/sprites/xyani/umbreon.gif)
-A Pokémon battle-bot that can play battles on [Pokemon Showdown](https://pokemonshowdown.com/).
+# Showdown Puzzle
+A program to make and run Pokémon battle puzzles to run on [Pokemon Showdown](https://pokemonshowdown.com/). The code is based on [pmariglia's Showdown battle-bot](https://github.com/pmariglia/showdown), so huge thanks to them.
 
 The bot can play single battles in generations 3 through 8.
 
-![badge](https://github.com/pmariglia/showdown/actions/workflows/pythonapp.yml/badge.svg)
-
-## Python version
-Developed and tested using Python 3.8.
 
 ## Getting Started
+
+### Installation
+
+**1. Clone**
+
+Clone the repository with `git clone https://github.com/CapClumsy/ShowdownPuzzle.git`
+
+**2. Install Requirements**
+
+Install the requirements with `pip install -r requirements.txt`.
+
+**3. Configure your [env](./env) file**
+
+Here is a sample:
+```
+PUZZLE=MyPuzzle
+WEBSOCKET_URI=sim.smogon.com:8000
+PS_USERNAME=MyUsername
+PS_PASSWORD=MyPassword
+BOT_MODE=ACCEPT_CHALLENGE
+POKEMON_MODE=gen9nationaldexag
+RUN_COUNT=100
+```
+
+### Run
+
+Run with `python run.py` or double click [`run.py`](./run.py) with the python launcher installed
+
+#### Python version
+Developed and tested using Python 3.12.0.
 
 ### Configuration
 Environment variables are used for configuration.
 You may either set these in your environment before running,
-or populate them in the [env](https://github.com/pmariglia/showdown/blob/master/env) file.
+or populate them in the [env](./env) file.
 
 The configurations available are:
 
 | Config Name | Type | Required | Description |
 |---|:---:|:---:|---|
-| **`BATTLE_BOT`** | string | yes | The BattleBot module to use. More on this below in the Battle Bots section |
+| **`PUZZLE`** | string | yes | The BattleBot module to use. More on this below in the Battle Bots section |
 | **`WEBSOCKET_URI`** | string | yes | The address to use to connect to the Pokemon Showdown websocket |
 | **`PS_USERNAME`** | string | yes | Pokemon Showdown username |
 | **`PS_PASSWORD`** | string | yes | Pokemon Showdown password  |
@@ -27,128 +53,164 @@ The configurations available are:
 | **`POKEMON_MODE`** | string | yes | The type of game this bot will play: `gen8ou`, `gen7randombattle`, etc. |
 | **`USER_TO_CHALLENGE`** | string | only if `BOT_MODE` is `CHALLENGE_USER` | If `BOT_MODE` is `CHALLENGE_USER`, this is the name of the user you want your bot to challenge |
 | **`RUN_COUNT`** | int | no | The number of games the bot will play before quitting |
-| **`TEAM_NAME`** | string | no | The name of the file that contains the team you want to use. More on this below in the Specifying Teams section. |
 | **`ROOM_NAME`** | string | no | If `BOT_MODE` is `ACCEPT_CHALLENGE`, the bot will join this chatroom while waiting for a challenge. |
 | **`SAVE_REPLAY`** | boolean | no | Specifies whether or not to save replays of the battles (`True` / `False`) |
 | **`LOG_LEVEL`** | string | no | The Python logging level (`DEBUG`, `INFO`, etc.) |
 
-### Running without Docker
+## Make Your Own Puzzles
 
-**1. Clone**
+### Setup
 
-Clone the repository with `git clone https://github.com/pmariglia/showdown.git`
+Puzzles are stored in [`puzzles/puzzles`](./puzzles/puzzles). Create a a new folder. The **name of the of the folder is used for the name of the puzzle**. Each folder needs three files (make sure they have no file extension).
 
-**2. Install Requirements**
+1. `puzzle`
 
-Install the requirements with `pip install -r requirements.txt`.
+The code containing the commands to execute during the battle. More on this below.
 
-**3. Configure your [env](https://github.com/pmariglia/showdown/blob/master/env) file**
+2. `team`
 
-Here is a sample:
+Plain text containing the team information in the [PokePaste format](https://pokepast.es/syntax.html). (Select "Upload to PokePaste" from the Showdown teambuilder.)
+
+3. `hints`
+
+Hints you want the bot to give when prompted. Each hint should be separated by a newline. It is okay to leave this file blank, but don't delete it.
+
+### Syntax
+
+Commands found in the `puzzle` file are executed from top to bottom. Every puzzle file must begin with a set switch command to specify the lead Pokemon to send out. During parsing, all arguments for commands (move names, pokemon names) have all spaces and dashes removed and are converted to lowercase. When running, pay attention to the error messages, as the program gives notifications for when there are syntax errors in the code or the requested Pokemon or move name does not exist or is misspelled.
+
+#### Use a move
+
+`+ <move name>`
+
+Use `+` followed by the name of the move
+
+**Example:** Makes the active Pokemon use Splash
+
 ```
-BATTLE_BOT=safest
-WEBSOCKET_URI=sim.smogon.com:8000
-PS_USERNAME=MyUsername
-PS_PASSWORD=MyPassword
-BOT_MODE=SEARCH_LADDER
-POKEMON_MODE=gen7randombattle
-RUN_COUNT=1
-```
-
-**4. Run**
-
-Run with `python run.py`
-
-### Running with Docker
-This requires Docker 17.06 or higher.
-
-**1. Clone the repository**
-
-`git clone https://github.com/pmariglia/showdown.git`
-
-**2. Build the Docker image**
-
-`docker build . -t showdown`
-
-**3. Run with an environment variable file**
-
-`docker run --env-file env showdown`
-
-## Battle Bots
-
-This project has a few different battle bot implementations.
-Each of these battle bots use a different method to determine which move to use.
-
-### Safest
-use `BATTLE_BOT=safest`
-
-The bot searches through the game-tree for two turns and selects the move that minimizes the possible loss for a turn.
-
-For decisions with random outcomes a weighted average is taken for all possible end states.
-For example: If using draco meteor versus some arbitrary other move results in a score of 1000 if it hits (90%) and a score of 900 if it misses (10%), the overall score for using
-draco meteor is (0.9 * 1000) + (0.1 * 900) = 990.
-
-This is equivalent to the [Expectiminimax](https://en.wikipedia.org/wiki/Expectiminimax) strategy.
-
-This decision type is deterministic - the bot will always make the same move given the same situation again.
-
-### Nash-Equilibrium (experimental)
-use `BATTLE_BOT=nash_equilibrium`
-
-Using the information it has, plus some assumptions about the opponent, the bot will attempt to calculate the [Nash-Equilibrium](https://en.wikipedia.org/wiki/Nash_equilibrium) with the highest payoff
-and select a move from that distribution.
-
-The Nash Equilibrium is calculated using command-line tools provided by the [Gambit](http://www.gambit-project.org/) project.
-This decision method should only be used when running with Docker and will fail otherwise.
-
-This decision method is **not** deterministic. The bot **may** make a different move if presented with the same situation again.
-
-### Team Datasets (experimental)
-
-use `BATTLE_BOT=team_datasets`
-
-Using a file of sets & teams, this battle-bot is meant to have a better
-understanding of Pokeon sets that may appear.
-Populate this dataset by editing `data/team_datasets.json`.
-
-Still uses the `safest` decision making method for picking a move, but in theory the knowledge of sets should
-result in better decision making.
-
-### Most Damage
-use `BATTLE_BOT=most_damage`
-
-Selects the move that will do the most damage to the opponent
-
-Does not switch
-
-## Write your own bot
-Create a package in [showdown/battle_bots](https://github.com/pmariglia/showdown/tree/master/showdown/battle_bots) with
-a module named `main.py`. In this module, create a class named `BattleBot`, override the Battle class,
-and implement your own `find_best_move` function.
-
-Set the `BATTLE_BOT` environment variable to the name of your package and your function will be called each time PokemonShowdown prompts the bot for a move
-
-## The Battle Engine
-The bots in the project all use a Pokemon battle engine to determine all possible transpositions that may occur from a pair of moves.
-
-For more information, see [ENGINE.md](https://github.com/pmariglia/showdown/blob/master/ENGINE.md) 
-
-## Specifying Teams
-You can specify teams by setting the `TEAM_NAME` environment variable.
-Examples can be found in `teams/teams/`.
-
-Passing in a directory will cause a random team to be selected from that directory.
-
-The path specified should be relative to `teams/teams/`.
-
-#### Examples
-
-Specify a file:
-```
-TEAM_NAME=gen8/ou/clef_sand
++ Splash
 ```
 
-Specify a directory:
+#### Mega Evolve
+
+`+@ <move name>`
+
+Use `@` when selecting a move before a move name to mega evolve when using the move, if possible.
+
+**Example:** Makes the active Pokemon mega evolve and use Fake Out
+
 ```
-TEAM_NAME=gen8/ou
++@ Fake out
+```
+
+#### Terastallize
+
+`+# <move name>`
+
+Use `#` when selecting a move before a move name to terastallize when using the move, if possible.
+
+**Example:** Makes the active Pokemon terrastallize and use Tera Blast
+
+```
++# Tera Blast
+```
+
+#### Switch
+
+`> <pokemon name>`
+
+Use `>` followed by the name of the Pokemon. Name modifiers such as alternate forms, types, or mega should not be used.
+
+**Example:** Switches to Arcanine
+
+```
+> switch Arcanine
+```
+
+#### Set Switch
+
+`(<pokemon name>)`
+
+Whenever a switch is required, such as
+
+- the beginning of a battle
+- after fainting
+- using moves like U-turn or Volt Switch
+
+the bot needs to know which Pokemon to switch to. Put the name of the Pokemon in between parentheses `()` to specify what Pokemon to switch to when a switch is required. *The first command of every puzzle file must be a set switch command to specify which Pokemon to lead with.*
+
+**Example:** Sets Ninetales as the Pokemon to switch to when the currently active Pokemon faints or uses a switch-out move, or sends out Ninetails as the lead Pokemon if this is the first command of the puzzle/beginning of the battle
+
+```
+(Ninetales)
+```
+
+**Example:** Switches out to Riolu after the active Pokemon uses U-turn
+
+```
+(Riolu)
++ U-turn
+```
+
+#### Repeat Until Faint
+
+`[<commands>]`
+
+Put a list of commands between square brackets `[]` to have a Pokemon repeat those commands until they faint. *You must have a switch set for once the Pokemon faints.* You must set the switch before the repeating commands, not after.
+
+**Example:** Makes the active Pokemon use Dragon Pulse until it faints, then sends out Frosmoth
+
+```
+(Frosmoth)
+[+ Dragon Pulse]
+```
+
+**Example:** Makes the active Pokemon alternate between using Thunderbolt and Double team until it faints, then sends out Tinkaton 
+
+```
+(Tinkaton)
+[
+    + Thunderbolt
+    + Double Team
+]
+```
+
+#### Comment
+
+`// comment`
+
+Use `//` to ignore all of the text until the next reserved symbol. They may span multiple lines but cannot contain any of the symbols used for commands.
+
+**Example:**
+
+```
+// The solution is for the player to tera normal
+(Ampharos)
+[+ Shadow claw]
+```
+
+### Summary
+| Symbol | Name | Usage |
+|---|:---:|:---:|
+| `+` | Move | `+ <move>` |
+| `@` | Mega | `+@ <move>` |
+| `#` | Terastallize | `+# <move>` |
+| `>` | Switch | `> <pokemon>` |
+| `()` | Set switch | `(<pokemon>)` |
+| `[]` | Repeat until faint | `[<commands>]` |
+
+### Full Example
+As seen in [`puzzles/puzzles/DeoxysRocks/puzzle`](./puzzles/puzzles/DeoxysRocks/puzzle)
+
+```
+(Deoxys-Attack)
++ Protect
++ Stealth Rock
+(Dracovish)
+[+ Extreme Speed]
+
+(Kingambit)
+[+ Fishious Rend]
+
+[+ Kowtow Cleave]
 ```
