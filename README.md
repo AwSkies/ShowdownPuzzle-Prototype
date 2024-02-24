@@ -124,7 +124,7 @@ Use `>` followed by the name of the Pokemon. Name modifiers such as alternate fo
 **Example:** Switches to Arcanine
 
 ```
-> switch Arcanine
+> Arcanine
 ```
 
 #### Set Switch
