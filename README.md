@@ -1,8 +1,5 @@
 # Showdown Puzzle
-A program to make and run Pokémon battle puzzles to run on [Pokemon Showdown](https://pokemonshowdown.com/). The code is based on [pmariglia's Showdown battle-bot](https://github.com/pmariglia/showdown), so huge thanks to them.
-
-The bot can play single battles in generations 3 through 8.
-
+A program to make and run Pokémon battle puzzles to run on [Pokemon Showdown](https://pokemonshowdown.com/). The code is written by me and based on [pmariglia's Showdown battle-bot](https://github.com/pmariglia/showdown), so huge thanks to them. The puzzles found in [the puzzles folder](./puzzles/puzzles) are made by norkbork.
 
 ## Getting Started
 
