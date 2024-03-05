@@ -167,7 +167,15 @@ async def pokemon_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_
     battle = await start_battle(ps_websocket_client, pokemon_battle_type, puzzle_commands)
     n_hints = 0
     while True:
-        msg = await ps_websocket_client.receive_message()
+        msg: str = await ps_websocket_client.receive_message()
+
+        try:
+            split_message = msg.splitlines()[1].split('|')
+            hint_message = split_message[3]
+            hint = split_message[1] == 'c' and 'hint' in hint_message and len(hints) != 0
+        except Exception as e:
+            hint = False
+
         if battle_is_finished(battle.battle_tag, msg):
             if constants.WIN_STRING in msg:
                 winner = msg.split(constants.WIN_STRING)[-1].split('\n')[0].strip()
@@ -177,10 +185,9 @@ async def pokemon_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_
             await ps_websocket_client.send_message(battle.battle_tag, ["gg"])
             await ps_websocket_client.leave_battle(battle.battle_tag, save_replay=ShowdownConfig.save_replay)
             return winner
-        # TODO: Check the message properly
         # TODO: Implement crit detection
-        elif msg.startswith(constants.HINT_COMMAND) and n_hints < len(hints):
-            await ps_websocket_client.send_message(battle.battle_tag, [hints[n_hints]])
+        elif hint:
+            await ps_websocket_client.send_message(battle.battle_tag, [hints[n_hints % len(hints)]])
             n_hints += 1
         else:
             action_required = await async_update_battle(battle, msg)
