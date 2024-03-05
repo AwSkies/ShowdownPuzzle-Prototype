@@ -16,30 +16,27 @@ def format_decision(battle: Battle, decision, switch = False, **kwargs):
 
     if switch:
         switch_pokemon = decision
-        verify = f"switch {switch_pokemon.replace(' ', '')}"
+        verify = f"{constants.SWITCH_STRING} {switch_pokemon}"
         if switch_pokemon in [pkmn.name for pkmn in battle.user.reserve]:
-            message = "/switch {}".format(switch_pokemon)
+            message = f"/{constants.SWITCH_STRING} {switch_pokemon}"
         else:
-            raise ValueError("Tried to switch to: {}".format(switch_pokemon))
+            raise ValueError(f"Tried to switch to: {switch_pokemon}")
     else:
         message = "/choose move {}".format(decision)
-        verify = decision.replace(' ', '')
+        verify = decision
         for flag in kwargs:
             if flag == 'mega' and kwargs['mega'] and battle.user.active.can_mega_evo:
-                message = "{} {}".format(message, constants.MEGA)
-            
+                message += f" {constants.MEGA}"
             elif flag == 'ultra_burst' and kwargs['ultra_burst'] and battle.user.active.can_ultra_burst:
-                message = "{} {}".format(message, constants.ULTRA_BURST)
-
+                message += f" {constants.ULTRA_BURST}"
             if flag == 'dynamax' and kwargs['dynamax'] and battle.user.active.can_dynamax:
-                message = "{} {}".format(message, constants.DYNAMAX)
-
+                message += f" {constants.DYNAMAX}"
             elif flag == 'tera' and kwargs['tera'] and battle.user.active.can_terastallize:
-                message = "{} {}".format(message, constants.TERASTALLIZE)
-
+                message += f" {constants.TERASTALLIZE}"
             if flag == 'z' and kwargs['z'] and battle.user.active.get_move(decision).can_z:
-                message = "{} {}".format(message, constants.ZMOVE)
-    
+                message += f" {constants.ZMOVE}"
+
+    # Verify that the decision being made is a valid option
     if verify not in battle.get_all_options()[0]:
         raise ValueError(f"{verify} is not a valid option at this time")
 
