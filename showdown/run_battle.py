@@ -185,7 +185,9 @@ async def pokemon_battle(ps_websocket_client: PSWebsocketClient, pokemon_battle_
             await ps_websocket_client.send_message(battle.battle_tag, ["gg"])
             await ps_websocket_client.leave_battle(battle.battle_tag, save_replay=ShowdownConfig.save_replay)
             return winner
-        # TODO: Implement crit detection
+        elif '-crit' in msg.split('|'):
+            await ps_websocket_client.send_message(battle.battle_tag, ["Critical hit detected - aborting puzzle"])
+            await ps_websocket_client.leave_battle(battle.battle_tag, save_replay=ShowdownConfig.save_replay)
         elif hint:
             await ps_websocket_client.send_message(battle.battle_tag, [hints[n_hints % len(hints)]])
             n_hints += 1
